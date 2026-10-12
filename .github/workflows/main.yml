@@ -52,4 +52,28 @@ jobs:
           CONNECTED_APP_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
           CONNECTED_APP_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
 
-      
+      - name: Package Application
+        run: |
+          mvn package \
+            -DskipMunitTests \
+            -Dmule.key="${{ secrets.SECURE_KEY }}" \
+            -s .maven/settings.xml
+        env:
+          CONNECTED_APP_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
+          CONNECTED_APP_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
+
+      - name: Publish to Exchange
+        run: |
+          mvn deploy \
+            -DskipMunitTests \
+            -DskipMuleDeploy \
+            -Dmule.key="${{ secrets.SECURE_KEY }}" \
+            -s .maven/settings.xml
+        env:
+          CONNECTED_APP_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
+          CONNECTED_APP_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
+
+      - name: Deploy to CloudHub 2.0
+        run: |
+          mvn mule:deploy \
+            -DskipMunitTests
