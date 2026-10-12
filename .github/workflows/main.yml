@@ -76,4 +76,15 @@ jobs:
       - name: Deploy to CloudHub 2.0
         run: |
           mvn mule:deploy \
-            -DskipMunitTests
+            -DskipMunitTests \
+            -Dmule.key="${{ secrets.SECURE_KEY }}" \
+            -s .maven/settings.xml \
+            -Danypoint.orgId="${{ vars.ANYPOINT_ORG_ID }}" \
+            -Danypoint.environment="${{ vars.ANYPOINT_ENVIRONMENT }}" \
+            -Danypoint.target="${{ vars.CLOUDHUB_TARGET }}" \
+            -Danypoint.appName="${{ vars.APPLICATION_NAME }}" \
+            -DmuleVersion="${{ vars.MULE_VERSION }}"
+        env:
+          CONNECTED_APP_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
+          CONNECTED_APP_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
+          SECURE_KEY: ${{ secrets.SECURE_KEY }}
