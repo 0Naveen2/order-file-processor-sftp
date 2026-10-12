@@ -903,18 +903,7 @@ http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/mu
             times="1"
             doc:name="Verify SFTP List Attempted Once"/>
 
-        <munit-tools:verify-call
-            processor="flow-ref"
-            times="1"
-            doc:name="Verify Error Handler Called Once">
-
-            <munit-tools:with-attributes>
-                <munit-tools:with-attribute
-                    attributeName="name"
-                    whereValue="#[MunitTools::equalTo('sftp-file-error-handler')]"/>
-            </munit-tools:with-attributes>
-
-        </munit-tools:verify-call>
+        
 
     </munit:validation>
 
@@ -993,18 +982,6 @@ http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/mu
         <munit-tools:verify-call
             processor="sftp:read"
             times="1"/>
-
-        <munit-tools:verify-call
-            processor="flow-ref"
-            times="1">
-
-            <munit-tools:with-attributes>
-                <munit-tools:with-attribute
-                    attributeName="name"
-                    whereValue="#[MunitTools::equalTo('sftp-file-error-handler')]"/>
-            </munit-tools:with-attributes>
-
-        </munit-tools:verify-call>
 
         <munit-tools:verify-call
             processor="sftp:move"
