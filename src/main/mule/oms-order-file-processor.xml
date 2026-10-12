@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:sftp="http://www.mulesoft.org/schema/mule/sftp"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/sftp http://www.mulesoft.org/schema/mule/sftp/current/mule-sftp.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <flow name="oms-order-file-processor-flow" doc:id="979dbc11-159f-4cee-8856-41677089851d">
+
+        <!-- ===================================================== -->
+        <!-- 1. SCHEDULED FILE CHECK                               -->
+        <!-- ===================================================== -->
+        <scheduler doc:name="Scheduler - Trigger File Poll" doc:id="546c9f94-1ef9-4227-bd25-e9a9970ec077">
+            <scheduling-strategy>
+                <fixed-frequency
+                    frequency="30"
+                    timeUnit="SECONDS"/>
+            </scheduling-strategy>
+        </scheduler>
+
+        <!-- ===================================================== -->
+        <!-- 2. LIST INBOUND FILES                                -->
+        <!-- ===================================================== -->
+        <sftp:list
+            doc:name="SFTP - List Inbound Files"
+            doc:id="7aaa0e4a-f183-4751-802f-d20309d44d79"
+            config-ref="SFTP_Config"
+            directoryPath="${sftp.inbound-path}"/>
+
+        <!-- ===================================================== -->
+        <!-- 3. PROCESS EACH FILE                                 -->
+        <!-- ===================================================== -->
+        <foreach doc:name="For Each - Inbound File" doc:id="eee1d7c7-e654-41b9-9fea-e47b834058dd">
+			
+			<logger
+    			level="INFO"
+   	 			doc:name="Debug Payload"
+    			message='#[write(payload,"application/json")]'/>
+
+            <set-variable
+                variableName="inputFilePath"
+                doc:name="Set Variable - Input File Path"
+                doc:id="a1f08b70-348b-444c-93a8-22060e4013d6"
+                value="#[payload]"/>
+
+            <set-variable
+                variableName="inputFileName"
+                doc:name="Set Variable - Input File Name"
+                doc:id="9321158f-ced6-4292-b020-84739be7a385"
+                value="#[(payload splitBy '/')[-1]]"/>
+
+            <logger
+                level="INFO"
+                doc:name="Logger - File Processing Started"
+                doc:id="54180553-efc8-4891-95fd-8bd505bdb24e"
+                message='#["[SFTP] Starting file processing: " ++ vars.inputFileName]'/>
+
+            <!-- ================================================= -->
+            <!-- 4. READ CSV                                      -->
+            <!-- ================================================= -->
+            <sftp:read
+                doc:name="SFTP - Read CSV File"
+                doc:id="e881cbfa-8a6a-4dae-ab73-7147c82dc813"
+                config-ref="SFTP_Config"
+                path="#[vars.inputFilePath]"/>
+
+            <logger
+                level="INFO"
+                doc:name="Logger - File Read Success"
+                doc:id="94ec6c04-bd62-4837-9735-56d6a2fc7099"
+                message='#["[SFTP] File read successfully: " ++ vars.inputFileName]'/>
+
+            <!-- ================================================= -->
+            <!-- 5. PARSE CSV TO ARRAY VIA TRANSFORM MESSAGE      -->
+            <!-- ================================================= -->
+            <ee:transform doc:name="Transform Message - Parse CSV to Array" doc:id="0fd30d56-4b95-4391-87db-d64fe5cb17cf">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+payload]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+
+            <logger
+                level="INFO"
+                doc:name="Logger - CSV Record Count"
+                doc:id="689b1151-b02d-4928-9092-a2bdb353f3e5"
+                message='#["[SFTP] Records found in file " ++ vars.inputFileName ++ ": " ++ sizeOf(payload)]'/>
+
+            <!-- ================================================= -->
+            <!-- 6. PROCESS EACH RECORD                            -->
+            <!-- ================================================= -->
+            <foreach doc:name="For Each - CSV Record" doc:id="0aa1aa08-8b6c-44c9-9324-2cb683842828">
+
+                <logger
+                    level="INFO"
+                    doc:name="Logger - Processing Record"
+                    doc:id="d3db408d-a36e-4877-9df5-1fe5ae2ed402"
+                    message='#["[SFTP] Processing record: " ++ write(payload, "application/json")]'/>
+
+                <choice doc:name="Choice - Route Operation" doc:id="938ab14f-2f8d-4ec7-8988-21f70ffe2501">
+
+                    <!-- CREATE -->
+                    <when expression='#[upper(payload.operation default "") == "CREATE"]'>
+                        <flow-ref
+                            name="create-order-subflow"
+                            doc:name="Flow Ref - Call Create Order Subflow"/>
+                    </when>
+
+                    <!-- UPDATE -->
+                    <when expression='#[upper(payload.operation default "") == "UPDATE"]'>
+                        <flow-ref
+                            name="update-order-subflow"
+                            doc:name="Flow Ref - Call Update Order Subflow"/>
+                    </when>
+
+                    <!-- DELETE -->
+                    <when expression='#[upper(payload.operation default "") == "DELETE"]'>
+                        <flow-ref
+                            name="delete-order-subflow"
+                            doc:name="Flow Ref - Call Delete Order Subflow"/>
+                    </when>
+
+                    <!-- INVALID OPERATION -->
+                    <otherwise>
+                        <logger
+                            level="ERROR"
+                            doc:name="Logger - Invalid Operation"
+                            doc:id="1b9f7dbc-54bd-47f5-bf31-4a8b846bbf3a"
+                            message='#["[SFTP] Invalid operation: " ++ (payload.operation default "EMPTY") ++ " | Record: " ++ write(payload, "application/json")]'/>
+                    </otherwise>
+
+                </choice>
+
+            </foreach>
+
+            <!-- ================================================= -->
+            <!-- 7. ARCHIVE / MOVE PROCESSED FILE                  -->
+            <!-- ================================================= -->
+            <sftp:move
+                doc:name="SFTP - Move File to Archive"
+                doc:id="824b134d-03ee-47ff-9c40-f9ed0de24eb2"
+                config-ref="SFTP_Config"
+                sourcePath="#[vars.inputFilePath]"
+                targetPath="${sftp.archive-path}"/>
+
+            <logger
+                level="INFO"
+                doc:name="Logger - File Archiving Success"
+                doc:id="01170e96-568c-4ef0-ac58-eef4225c6414"
+                message='#["[SFTP] Successfully moved processed file to archive: " ++ vars.inputFileName]'/>
+
+            <logger
+                level="INFO"
+                doc:name="Logger - File Processing Completed"
+                doc:id="40a01c94-10ef-47b2-b20b-01a4b2bbf843"
+                message='#["[SFTP] Completed full file processing pipeline for: " ++ vars.inputFileName]'/>
+
+        </foreach>
+
+        <!-- ===================================================== -->
+        <!-- FILE LEVEL ERROR HANDLER                              -->
+        <!-- ===================================================== -->
+        <error-handler>
+            <on-error-continue
+                type="ANY"
+                enableNotifications="true"
+                logException="true"
+                doc:name="On Error Continue - Handle File Error">
+                <flow-ref
+                    name="sftp-file-error-handler"
+                    doc:name="Flow Ref - Call SFTP Error Handler"/>
+            </on-error-continue>
+        </error-handler>
+
+    </flow>
+
+</mule>

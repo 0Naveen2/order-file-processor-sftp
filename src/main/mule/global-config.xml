@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties" xmlns:amqp="http://www.mulesoft.org/schema/mule/amqp"
+	xmlns:sftp="http://www.mulesoft.org/schema/mule/sftp"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/sftp http://www.mulesoft.org/schema/mule/sftp/current/mule-sftp.xsd
+http://www.mulesoft.org/schema/mule/amqp http://www.mulesoft.org/schema/mule/amqp/current/mule-amqp.xsd
+http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd">
+	<configuration-properties doc:name="Configuration properties" doc:id="d14cdf8d-f9da-4c97-9f45-759b02a4ad7c" file="config/config-dev.yaml" />
+	<sftp:config name="SFTP_Config" doc:name="SFTP Config" doc:id="fb86073d-b06c-4864-b178-d89c55d9b93f" >
+		<sftp:connection host="${sftp.host}" username="${sftp.username}" password="${secure::sftp.password}" port="${sftp.port}"/>
+	</sftp:config>
+	<amqp:config name="AMQP_Config" doc:name="AMQP Config" doc:id="6e749575-c0cf-42f6-845c-fa4a9ace871b" >
+		<amqp:connection host="${amqp.host}" port="${amqp.port}" virtualHost="${amqp.virtualHost}" username="${amqp.username}" password="${secure::amqp.password}" useTls="true" />
+	</amqp:config>
+	<secure-properties:config name="Secure_Properties_Config" doc:name="Secure Properties Config" doc:id="966cd12c-63f7-4e12-b773-beffb6cc4255" file="config/secure-dev.yaml" key="${mule.key}" >
+		<secure-properties:encrypt algorithm="Blowfish" />
+	</secure-properties:config>
+</mule>

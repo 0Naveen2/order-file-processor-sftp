@@ -1,0 +1,14 @@
+sftp:
+  host: "ap-southeast-1.sftpcloud.io"
+  port: "22"
+  username: "ebc2e90fcf504eccaf3e55b7a6f911d2"
+  inbound-path: "/Inbound"
+  archive-path: "/Archive"
+  error-path: "/Error"
+
+amqp:
+  host: "puffin-01.rmq2.cloudamqp.com"
+  port: "5671"
+  virtualHost: "sgvymzpq"
+  username: "sgvymzpq"
+  queue: "order.commands"

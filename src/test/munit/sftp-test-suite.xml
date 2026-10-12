@@ -1,0 +1,1019 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+      xmlns:amqp="http://www.mulesoft.org/schema/mule/amqp"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd 
+        http://www.mulesoft.org/schema/mule/core
+        http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/munit
+        http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+        http://www.mulesoft.org/schema/mule/munit-tools
+        http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+        http://www.mulesoft.org/schema/mule/amqp
+        http://www.mulesoft.org/schema/mule/amqp/current/mule-amqp.xsd">
+
+    <munit:config
+        name="sftp-test-suite.xml"
+        doc:name="MUnit Configuration"/>
+
+    <!-- ========================================================= -->
+    <!-- TC-01: Valid CREATE record                                -->
+    <!-- ========================================================= -->
+
+    <munit:test
+        name="create-order-subflow-valid-create-test"
+        doc:name="TC-01 Valid CREATE Record"
+        description="Covers the successful branch of create-order-subflow and verifies AMQP publish.">
+
+        <munit:behavior>
+
+            <!--
+                Mock the AMQP connector so that the test does not
+                connect to the real RabbitMQ/AMQP server.
+            -->
+            <munit-tools:mock-when
+                processor="amqp:publish"
+                doc:name="Mock AMQP Publish">
+
+                <munit-tools:then-return>
+                    <munit-tools:payload
+                        value="#[payload]"
+                        mediaType="application/json"/>
+                </munit-tools:then-return>
+
+            </munit-tools:mock-when>
+
+        </munit:behavior>
+
+        <munit:execution>
+
+            <!--
+                All fields required by the actual CREATE validation
+                condition are provided.
+            -->
+            <munit:set-event doc:name="Set Valid CREATE Event">
+
+                <munit:payload
+                    value="#[{
+                        operation: 'CREATE',
+                        customerId: 'CUST-001',
+                        customerName: 'John Doe',
+                        customerEmail: 'john.doe@example.com',
+                        orderDate: '2026-10-11',
+                        productCode: 'PROD-001',
+                        quantity: '2',
+                        currency: 'USD',
+                        shippingAddressLine1: '123 Main Street',
+                        shippingAddressLine2: '',
+                        shippingCity: 'Hyderabad',
+                        shippingState: 'Telangana',
+                        shippingPostalCode: '500019',
+                        shippingCountry: 'India'
+                    }]"
+                    mediaType="application/java"/>
+
+            </munit:set-event>
+
+            <!--
+                Execute the exact subflow name present in subflows.xml.
+            -->
+            <flow-ref
+                name="create-order-subflow"
+                doc:name="Run create-order-subflow"/>
+
+        </munit:execution>
+
+        <munit:validation>
+
+            <!--
+                Verify that the successful CREATE branch reached
+                the AMQP Publish component exactly once.
+            -->
+            <munit-tools:verify-call
+                processor="amqp:publish"
+                times="1"
+                doc:name="Verify AMQP Publish Called Once"/>
+
+        </munit:validation>
+
+    </munit:test>
+    <!-- ========================================================= -->
+<!-- TC-02: Invalid CREATE record                              -->
+<!-- Covers otherwise branch of Validate CREATE Record         -->
+<!-- ========================================================= -->
+
+<munit:test
+    name="create-order-subflow-invalid-create-test"
+    doc:name="TC-02 Invalid CREATE Record"
+    description="Covers the invalid CREATE otherwise branch when customerName is missing and verifies that AMQP publish is not called.">
+
+    <munit:behavior>
+
+        <!--
+            Mocking AMQP prevents any real RabbitMQ connection.
+            The invalid branch should not reach this processor.
+        -->
+        <munit-tools:mock-when
+            processor="amqp:publish"
+            doc:name="Mock AMQP Publish">
+
+            <munit-tools:then-return>
+                <munit-tools:payload
+                    value="#[payload]"
+                    mediaType="application/java"/>
+            </munit-tools:then-return>
+
+        </munit-tools:mock-when>
+
+    </munit:behavior>
+
+    <munit:execution>
+
+        <!--
+            customerName is intentionally missing.
+            This makes the actual CREATE validation condition false.
+        -->
+        <munit:set-event doc:name="Set Invalid CREATE Event">
+
+            <munit:payload
+                value="#[{
+                    operation: 'CREATE',
+                    customerEmail: 'john.doe@example.com',
+                    productCode: 'PROD-001',
+                    quantity: '2',
+                    currency: 'USD',
+                    shippingAddressLine1: '123 Main Street',
+                    shippingAddressLine2: '',
+                    shippingCity: 'Hyderabad',
+                    shippingState: 'Telangana',
+                    shippingPostalCode: '500019',
+                    shippingCountry: 'India'
+                }]"
+                mediaType="application/java"/>
+
+        </munit:set-event>
+
+        <flow-ref
+            name="create-order-subflow"
+            doc:name="Run create-order-subflow"/>
+
+    </munit:execution>
+
+    <munit:validation>
+
+        <!--
+            The invalid CREATE branch must not publish a message.
+        -->
+        <munit-tools:verify-call
+            processor="amqp:publish"
+            times="0"
+            doc:name="Verify AMQP Publish Not Called"/>
+
+    </munit:validation>
+
+</munit:test>
+
+<!-- ========================================================= -->
+<!-- TC-03: Valid UPDATE record                                -->
+<!-- Covers successful branch of update-order-subflow          -->
+<!-- ========================================================= -->
+
+<munit:test
+    name="update-order-subflow-valid-update-test"
+    doc:name="TC-03 Valid UPDATE Record"
+    description="Covers the valid UPDATE branch and verifies that AMQP publish is called exactly once.">
+
+    <munit:behavior>
+
+        <!-- Prevents connection to the actual RabbitMQ server -->
+        <munit-tools:mock-when
+            processor="amqp:publish"
+            doc:name="Mock AMQP Publish">
+
+            <munit-tools:then-return>
+                <munit-tools:payload
+                    value="#[payload]"
+                    mediaType="application/json"/>
+            </munit-tools:then-return>
+
+        </munit-tools:mock-when>
+
+    </munit:behavior>
+
+    <munit:execution>
+
+        <!--
+            Includes every field required by the actual
+            Validate UPDATE Record condition.
+        -->
+        <munit:set-event doc:name="Set Valid UPDATE Event">
+
+            <munit:payload
+                value="#[{
+                    operation: 'UPDATE',
+                    orderId: 'ORD-12345',
+                    customerName: 'Jane Doe',
+                    customerEmail: 'jane.doe@example.com',
+                    quantity: '3',
+                    shippingCity: 'Hyderabad',
+                    shippingState: 'Telangana',
+                    shippingPostalCode: '500019'
+                }]"
+                mediaType="application/java"/>
+
+        </munit:set-event>
+
+        <flow-ref
+            name="update-order-subflow"
+            doc:name="Run update-order-subflow"/>
+
+    </munit:execution>
+
+    <munit:validation>
+
+        <munit-tools:verify-call
+            processor="amqp:publish"
+            times="1"
+            doc:name="Verify UPDATE Published Once"/>
+
+    </munit:validation>
+
+</munit:test>
+
+<!-- ========================================================= -->
+<!-- TC-04: Invalid UPDATE record                              -->
+<!-- Covers otherwise branch of update-order-subflow          -->
+<!-- ========================================================= -->
+
+<munit:test
+    name="update-order-subflow-invalid-update-test"
+    doc:name="TC-04 Invalid UPDATE Record"
+    description="Covers the invalid UPDATE otherwise branch when orderId is missing and verifies that AMQP publish is not called.">
+
+    <munit:behavior>
+
+        <!--
+            Safety mock only. The invalid UPDATE branch should
+            not reach the AMQP Publish component.
+        -->
+        <munit-tools:mock-when
+            processor="amqp:publish"
+            doc:name="Mock AMQP Publish">
+
+            <munit-tools:then-return>
+                <munit-tools:payload
+                    value="#[payload]"
+                    mediaType="application/java"/>
+            </munit-tools:then-return>
+
+        </munit-tools:mock-when>
+
+    </munit:behavior>
+
+    <munit:execution>
+
+        <!--
+            orderId is intentionally omitted so the actual
+            UPDATE validation condition evaluates to false.
+        -->
+        <munit:set-event doc:name="Set Invalid UPDATE Event">
+
+            <munit:payload
+                value="#[{
+                    operation: 'UPDATE',
+                    customerName: 'Jane Doe',
+                    customerEmail: 'jane.doe@example.com',
+                    quantity: '3',
+                    shippingCity: 'Hyderabad',
+                    shippingState: 'Telangana',
+                    shippingPostalCode: '500019'
+                }]"
+                mediaType="application/java"/>
+
+        </munit:set-event>
+
+        <flow-ref
+            name="update-order-subflow"
+            doc:name="Run update-order-subflow"/>
+
+    </munit:execution>
+
+    <munit:validation>
+
+        <munit-tools:verify-call
+            processor="amqp:publish"
+            times="0"
+            doc:name="Verify AMQP Publish Not Called"/>
+
+    </munit:validation>
+
+</munit:test>
+
+<!-- ========================================================= -->
+<!-- TC-05: Valid DELETE record                                -->
+<!-- Covers successful branch of delete-order-subflow          -->
+<!-- ========================================================= -->
+
+<munit:test
+    name="delete-order-subflow-valid-delete-test"
+    doc:name="TC-05 Valid DELETE Record"
+    description="Covers the valid DELETE branch and verifies that AMQP publish is called exactly once.">
+
+    <munit:behavior>
+
+        <!-- Prevent connection to the actual RabbitMQ server -->
+        <munit-tools:mock-when
+            processor="amqp:publish"
+            doc:name="Mock AMQP Publish">
+
+            <munit-tools:then-return>
+                <munit-tools:payload
+                    value="#[payload]"
+                    mediaType="application/json"/>
+            </munit-tools:then-return>
+
+        </munit-tools:mock-when>
+
+    </munit:behavior>
+
+    <munit:execution>
+
+        <!--
+            Includes all fields required by the actual
+            Validate DELETE Record condition.
+        -->
+        <munit:set-event doc:name="Set Valid DELETE Event">
+
+            <munit:payload
+                value="#[{
+                    operation: 'DELETE',
+                    orderId: 'ORD-12345',
+                    customerName: 'John Doe',
+                    customerEmail: 'john.doe@example.com'
+                }]"
+                mediaType="application/java"/>
+
+        </munit:set-event>
+
+        <flow-ref
+            name="delete-order-subflow"
+            doc:name="Run delete-order-subflow"/>
+
+    </munit:execution>
+
+    <munit:validation>
+
+        <munit-tools:verify-call
+            processor="amqp:publish"
+            times="1"
+            doc:name="Verify DELETE Published Once"/>
+
+    </munit:validation>
+
+</munit:test>
+
+<!-- ========================================================= -->
+<!-- TC-06: Invalid DELETE record                              -->
+<!-- Covers otherwise branch of delete-order-subflow          -->
+<!-- ========================================================= -->
+
+<munit:test
+    name="delete-order-subflow-invalid-delete-test"
+    doc:name="TC-06 Invalid DELETE Record"
+    description="Covers the invalid DELETE otherwise branch when orderId is missing and verifies that AMQP publish is not called.">
+
+    <munit:behavior>
+
+        <!--
+            Safety mock only.
+            Invalid DELETE branch should not reach AMQP.
+        -->
+        <munit-tools:mock-when
+            processor="amqp:publish"
+            doc:name="Mock AMQP Publish">
+
+            <munit-tools:then-return>
+                <munit-tools:payload
+                    value="#[payload]"
+                    mediaType="application/java"/>
+            </munit-tools:then-return>
+
+        </munit-tools:mock-when>
+
+    </munit:behavior>
+
+    <munit:execution>
+
+        <!--
+            orderId is intentionally missing.
+            This makes the actual DELETE validation false.
+        -->
+        <munit:set-event doc:name="Set Invalid DELETE Event">
+
+            <munit:payload
+                value="#[{
+                    operation: 'DELETE',
+                    customerName: 'John Doe',
+                    customerEmail: 'john.doe@example.com'
+                }]"
+                mediaType="application/java"/>
+
+        </munit:set-event>
+
+        <flow-ref
+            name="delete-order-subflow"
+            doc:name="Run delete-order-subflow"/>
+
+    </munit:execution>
+
+    <munit:validation>
+
+        <munit-tools:verify-call
+            processor="amqp:publish"
+            times="0"
+            doc:name="Verify AMQP Publish Not Called"/>
+
+    </munit:validation>
+
+</munit:test>
+
+<!-- ========================================================= -->
+<!-- TC-07: Main flow with one valid CREATE file              -->
+<!-- Covers main SFTP pipeline and CREATE routing             -->
+<!-- ========================================================= -->
+
+<munit:test
+    name="main-flow-valid-create-file-test"
+    doc:name="TC-07 Main Flow Valid CREATE File"
+    description="Covers the main SFTP processing flow with one file containing one valid CREATE record.">
+
+    <munit:behavior>
+
+        <!--
+            Actual flow expects each sftp:list item to be a String
+            because inputFilePath is set directly from payload.
+        -->
+        <munit-tools:mock-when
+            processor="sftp:list"
+            doc:name="Mock SFTP List">
+
+            <munit-tools:then-return>
+                <munit-tools:payload
+                    value="#[['/inbound/orders.csv']]"
+                    mediaType="application/java"/>
+            </munit-tools:then-return>
+
+        </munit-tools:mock-when>
+
+        <!--
+            Return an Array of Java Maps.
+
+            The actual Parse CSV transform performs:
+            output application/java
+            -&#45;&#45;
+            payload
+
+            Therefore an Array of Maps remains compatible with the
+            following record-level foreach.
+        -->
+        <munit-tools:mock-when
+            processor="sftp:read"
+            doc:name="Mock SFTP Read">
+
+            <munit-tools:then-return>
+                <munit-tools:payload
+                    value="#[[
+                        {
+                            operation: 'CREATE',
+                            customerId: 'CUST-001',
+                            customerName: 'John Doe',
+                            customerEmail: 'john.doe@example.com',
+                            orderDate: '2026-10-11',
+                            productCode: 'PROD-001',
+                            quantity: '2',
+                            currency: 'USD',
+                            shippingAddressLine1: '123 Main Street',
+                            shippingAddressLine2: '',
+                            shippingCity: 'Hyderabad',
+                            shippingState: 'Telangana',
+                            shippingPostalCode: '500019',
+                            shippingCountry: 'India'
+                        }
+                    ]]"
+                    mediaType="application/java"/>
+            </munit-tools:then-return>
+
+        </munit-tools:mock-when>
+
+        <!-- Prevent connection to the real RabbitMQ server -->
+        <munit-tools:mock-when
+            processor="amqp:publish"
+            doc:name="Mock AMQP Publish">
+
+            <munit-tools:then-return>
+                <munit-tools:payload
+                    value="#[payload]"
+                    mediaType="application/json"/>
+            </munit-tools:then-return>
+
+        </munit-tools:mock-when>
+
+        <!--
+            Actual main flow calls sftp:move after processing.
+            This mock prevents connection to the real SFTP server.
+        -->
+        <munit-tools:mock-when
+            processor="sftp:move"
+            doc:name="Mock SFTP Move">
+
+            <munit-tools:then-return>
+                <munit-tools:payload
+                    value="#[payload]"
+                    mediaType="application/java"/>
+            </munit-tools:then-return>
+
+        </munit-tools:mock-when>
+
+    </munit:behavior>
+
+    <munit:execution>
+
+        <munit:set-event doc:name="Set Initial Event">
+            <munit:payload
+                value="#[null]"
+                mediaType="application/java"/>
+        </munit:set-event>
+
+        <!-- Exact flow name from the application XML -->
+        <flow-ref
+            name="oms-order-file-processor-flow"
+            doc:name="Run oms-order-file-processor-flow"/>
+
+    </munit:execution>
+
+    <munit:validation>
+
+        <munit-tools:verify-call
+            processor="sftp:list"
+            times="1"
+            doc:name="Verify SFTP List Called Once"/>
+
+        <munit-tools:verify-call
+            processor="sftp:read"
+            times="1"
+            doc:name="Verify SFTP Read Called Once"/>
+
+        <munit-tools:verify-call
+            processor="amqp:publish"
+            times="1"
+            doc:name="Verify CREATE Published Once"/>
+
+        <munit-tools:verify-call
+            processor="sftp:move"
+            times="1"
+            doc:name="Verify File Moved Once"/>
+
+    </munit:validation>
+
+</munit:test>
+
+<!-- ========================================================= -->
+<!-- TC-08: Main flow with invalid operation                   -->
+<!-- Covers Route Operation choice otherwise branch            -->
+<!-- ========================================================= -->
+
+<munit:test
+    name="main-flow-invalid-operation-test"
+    doc:name="TC-08 Main Flow Invalid Operation"
+    description="Covers the main-flow operation router otherwise branch and completes file archiving without calling AMQP.">
+
+    <munit:behavior>
+
+        <!--
+            Actual flow expects String file paths because:
+            inputFilePath = payload
+            inputFileName = (payload splitBy '/')[-1]
+        -->
+        <munit-tools:mock-when
+            processor="sftp:list"
+            doc:name="Mock SFTP List">
+
+            <munit-tools:then-return>
+                <munit-tools:payload
+                    value="#[['/inbound/invalid-operation.csv']]"
+                    mediaType="application/java"/>
+            </munit-tools:then-return>
+
+        </munit-tools:mock-when>
+
+        <!--
+            Array containing one invalid operation record.
+            The real inner foreach will process this record.
+        -->
+        <munit-tools:mock-when
+            processor="sftp:read"
+            doc:name="Mock SFTP Read">
+
+            <munit-tools:then-return>
+                <munit-tools:payload
+                    value="#[[
+                        {
+                            operation: 'UNKNOWN',
+                            customerName: 'John Doe'
+                        }
+                    ]]"
+                    mediaType="application/java"/>
+            </munit-tools:then-return>
+
+        </munit-tools:mock-when>
+
+        <!--
+            Safety mock. Invalid operation must not reach AMQP.
+        -->
+        <munit-tools:mock-when
+            processor="amqp:publish"
+            doc:name="Mock AMQP Publish">
+
+            <munit-tools:then-return>
+                <munit-tools:payload
+                    value="#[payload]"
+                    mediaType="application/java"/>
+            </munit-tools:then-return>
+
+        </munit-tools:mock-when>
+
+        <!--
+            Invalid operation only logs an error.
+            The application still reaches sftp:move afterward.
+        -->
+        <munit-tools:mock-when
+            processor="sftp:move"
+            doc:name="Mock SFTP Move">
+
+            <munit-tools:then-return>
+                <munit-tools:payload
+                    value="#[payload]"
+                    mediaType="application/java"/>
+            </munit-tools:then-return>
+
+        </munit-tools:mock-when>
+
+    </munit:behavior>
+
+    <munit:execution>
+
+        <munit:set-event doc:name="Set Initial Event">
+            <munit:payload
+                value="#[null]"
+                mediaType="application/java"/>
+        </munit:set-event>
+
+        <!-- Exact application flow name -->
+        <flow-ref
+            name="oms-order-file-processor-flow"
+            doc:name="Run oms-order-file-processor-flow"/>
+
+    </munit:execution>
+
+    <munit:validation>
+
+        <munit-tools:verify-call
+            processor="sftp:list"
+            times="1"
+            doc:name="Verify SFTP List Called Once"/>
+
+        <munit-tools:verify-call
+            processor="sftp:read"
+            times="1"
+            doc:name="Verify SFTP Read Called Once"/>
+
+        <!-- Invalid operation cannot call any AMQP publish -->
+        <munit-tools:verify-call
+            processor="amqp:publish"
+            times="0"
+            doc:name="Verify AMQP Publish Not Called"/>
+
+        <!-- Flow continues after logging invalid operation -->
+        <munit-tools:verify-call
+            processor="sftp:move"
+            times="1"
+            doc:name="Verify Invalid Operation File Moved Once"/>
+
+    </munit:validation>
+
+</munit:test>
+
+<!-- TC-09: Main flow UPDATE routing -->
+
+<munit:test
+    name="main-flow-update-route-test"
+    doc:name="TC-09 Main Flow UPDATE Route">
+
+    <munit:behavior>
+
+        <munit-tools:mock-when processor="sftp:list">
+            <munit-tools:then-return>
+                <munit-tools:payload
+                    value="#[['/inbound/update.csv']]"
+                    mediaType="application/java"/>
+            </munit-tools:then-return>
+        </munit-tools:mock-when>
+
+        <munit-tools:mock-when processor="sftp:read">
+            <munit-tools:then-return>
+                <munit-tools:payload
+                    value="#[[
+                        {
+                            operation: 'UPDATE',
+                            orderId: 'ORD-12345',
+                            customerName: 'Jane Doe',
+                            customerEmail: 'jane@example.com',
+                            quantity: '3',
+                            shippingCity: 'Hyderabad',
+                            shippingState: 'Telangana',
+                            shippingPostalCode: '500019'
+                        }
+                    ]]"
+                    mediaType="application/java"/>
+            </munit-tools:then-return>
+        </munit-tools:mock-when>
+
+        <munit-tools:mock-when processor="amqp:publish">
+            <munit-tools:then-return>
+                <munit-tools:payload
+                    value="#[payload]"
+                    mediaType="application/json"/>
+            </munit-tools:then-return>
+        </munit-tools:mock-when>
+
+        <munit-tools:mock-when processor="sftp:move">
+            <munit-tools:then-return>
+                <munit-tools:payload
+                    value="#[payload]"
+                    mediaType="application/java"/>
+            </munit-tools:then-return>
+        </munit-tools:mock-when>
+
+    </munit:behavior>
+
+    <munit:execution>
+
+        <munit:set-event>
+            <munit:payload
+                value="#[null]"
+                mediaType="application/java"/>
+        </munit:set-event>
+
+        <flow-ref name="oms-order-file-processor-flow"/>
+
+    </munit:execution>
+
+    <munit:validation>
+
+        <munit-tools:verify-call
+            processor="amqp:publish"
+            times="1"/>
+
+        <munit-tools:verify-call
+            processor="sftp:move"
+            times="1"/>
+
+    </munit:validation>
+
+</munit:test>
+
+<!-- TC-10: Main flow DELETE routing -->
+
+<munit:test
+    name="main-flow-delete-route-test"
+    doc:name="TC-10 Main Flow DELETE Route">
+
+    <munit:behavior>
+
+        <munit-tools:mock-when processor="sftp:list">
+            <munit-tools:then-return>
+                <munit-tools:payload
+                    value="#[['/inbound/delete.csv']]"
+                    mediaType="application/java"/>
+            </munit-tools:then-return>
+        </munit-tools:mock-when>
+
+        <munit-tools:mock-when processor="sftp:read">
+            <munit-tools:then-return>
+                <munit-tools:payload
+                    value="#[[
+                        {
+                            operation: 'DELETE',
+                            orderId: 'ORD-12345',
+                            customerName: 'John Doe',
+                            customerEmail: 'john@example.com'
+                        }
+                    ]]"
+                    mediaType="application/java"/>
+            </munit-tools:then-return>
+        </munit-tools:mock-when>
+
+        <munit-tools:mock-when processor="amqp:publish">
+            <munit-tools:then-return>
+                <munit-tools:payload
+                    value="#[payload]"
+                    mediaType="application/json"/>
+            </munit-tools:then-return>
+        </munit-tools:mock-when>
+
+        <munit-tools:mock-when processor="sftp:move">
+            <munit-tools:then-return>
+                <munit-tools:payload
+                    value="#[payload]"
+                    mediaType="application/java"/>
+            </munit-tools:then-return>
+        </munit-tools:mock-when>
+
+    </munit:behavior>
+
+    <munit:execution>
+
+        <munit:set-event>
+            <munit:payload
+                value="#[null]"
+                mediaType="application/java"/>
+        </munit:set-event>
+
+        <flow-ref name="oms-order-file-processor-flow"/>
+
+    </munit:execution>
+
+    <munit:validation>
+
+        <munit-tools:verify-call
+            processor="amqp:publish"
+            times="1"/>
+
+        <munit-tools:verify-call
+            processor="sftp:move"
+            times="1"/>
+
+    </munit:validation>
+
+</munit:test>
+<!-- TC-11: Main flow error-handler path -->
+
+<munit:test
+    name="main-flow-sftp-list-error-handler-test"
+    doc:name="TC-11 Main Flow SFTP List Error Handler">
+
+    <munit:behavior>
+
+        <munit-tools:mock-when
+            processor="sftp:list"
+            doc:name="Mock SFTP List Error">
+
+            <munit-tools:then-return>
+                <munit-tools:error
+                    typeId="SFTP:CONNECTIVITY"/>
+            </munit-tools:then-return>
+
+        </munit-tools:mock-when>
+
+    </munit:behavior>
+
+    <munit:execution>
+
+        <munit:set-event doc:name="Set Initial Event">
+            <munit:payload
+                value="#[null]"
+                mediaType="application/java"/>
+        </munit:set-event>
+
+        <flow-ref
+            name="oms-order-file-processor-flow"
+            doc:name="Run oms-order-file-processor-flow"/>
+
+    </munit:execution>
+
+    <munit:validation>
+
+        <munit-tools:verify-call
+            processor="sftp:list"
+            times="1"
+            doc:name="Verify SFTP List Attempted Once"/>
+
+        <munit-tools:verify-call
+            processor="flow-ref"
+            times="1"
+            doc:name="Verify Error Handler Called Once">
+
+            <munit-tools:with-attributes>
+                <munit-tools:with-attribute
+                    attributeName="name"
+                    whereValue="#[MunitTools::equalTo('sftp-file-error-handler')]"/>
+            </munit-tools:with-attributes>
+
+        </munit-tools:verify-call>
+
+    </munit:validation>
+
+</munit:test>
+
+<!-- TC-12: Direct execution of SFTP file error handler -->
+
+<munit:test
+    name="sftp-file-error-handler-direct-test"
+    doc:name="TC-12 Direct SFTP File Error Handler">
+
+    <munit:execution>
+
+        <munit:set-event doc:name="Set Initial Event">
+            <munit:payload
+                value="#[null]"
+                mediaType="application/java"/>
+        </munit:set-event>
+
+        <flow-ref
+            name="sftp-file-error-handler"
+            doc:name="Run sftp-file-error-handler"/>
+
+    </munit:execution>
+
+    <munit:validation>
+
+        <munit-tools:assert-that
+            expression="#[true]"
+            is="#[MunitTools::equalTo(true)]"
+            doc:name="Verify Error Handler Completed"/>
+
+    </munit:validation>
+
+</munit:test>
+
+<!-- TC-13: SFTP read failure handled by on-error-continue -->
+
+<munit:test
+    name="main-flow-sftp-read-error-test"
+    doc:name="TC-13 Main Flow SFTP Read Error">
+
+    <munit:behavior>
+
+        <munit-tools:mock-when processor="sftp:list">
+            <munit-tools:then-return>
+                <munit-tools:payload
+                    value="#[['/inbound/read-error.csv']]"
+                    mediaType="application/java"/>
+            </munit-tools:then-return>
+        </munit-tools:mock-when>
+
+        <munit-tools:mock-when processor="sftp:read">
+            <munit-tools:then-return>
+                <munit-tools:error
+                    typeId="SFTP:CONNECTIVITY"/>
+            </munit-tools:then-return>
+        </munit-tools:mock-when>
+
+    </munit:behavior>
+
+    <munit:execution>
+
+        <munit:set-event>
+            <munit:payload
+                value="#[null]"
+                mediaType="application/java"/>
+        </munit:set-event>
+
+        <flow-ref name="oms-order-file-processor-flow"/>
+
+    </munit:execution>
+
+    <munit:validation>
+
+        <munit-tools:verify-call
+            processor="sftp:read"
+            times="1"/>
+
+        <munit-tools:verify-call
+            processor="flow-ref"
+            times="1">
+
+            <munit-tools:with-attributes>
+                <munit-tools:with-attribute
+                    attributeName="name"
+                    whereValue="#[MunitTools::equalTo('sftp-file-error-handler')]"/>
+            </munit-tools:with-attributes>
+
+        </munit-tools:verify-call>
+
+        <munit-tools:verify-call
+            processor="sftp:move"
+            times="0"/>
+
+    </munit:validation>
+
+</munit:test>
+
+
+
+</mule>

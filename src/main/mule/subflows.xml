@@ -1,0 +1,280 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:amqp="http://www.mulesoft.org/schema/mule/amqp"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd 
+        http://www.mulesoft.org/schema/mule/core
+        http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+
+        http://www.mulesoft.org/schema/mule/ee/core
+        http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+
+        http://www.mulesoft.org/schema/mule/amqp
+        http://www.mulesoft.org/schema/mule/amqp/current/mule-amqp.xsd">
+
+    <!-- ========================================================= -->
+    <!-- CREATE ORDER                                             -->
+    <!-- ========================================================= -->
+
+    <sub-flow name="create-order-subflow">
+
+        <logger
+            level="INFO"
+            doc:name="Log CREATE Start"
+            message='#["[SFTP] CREATE record received"]'/>
+
+        <choice doc:name="Validate CREATE Record">
+
+            <when expression='#[!isEmpty(payload.customerName default "")
+                and !isEmpty(payload.customerEmail default "")
+                and !isEmpty(payload.productCode default "")
+                and !isEmpty(payload.quantity default "")
+                and ((payload.quantity as Number) > 0)
+                and !isEmpty(payload.currency default "")
+                and !isEmpty(payload.shippingAddressLine1 default "")
+                and !isEmpty(payload.shippingCity default "")
+                and !isEmpty(payload.shippingState default "")
+                and !isEmpty(payload.shippingPostalCode default "")
+                and !isEmpty(payload.shippingCountry default "")]'>
+
+                <ee:transform doc:name="Build CREATE PAPI Payload">
+
+                    <ee:message>
+                        <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    correlationId: (vars.inputFileName default "UNKNOWN") as String,
+    operation: "CREATE",
+    sourceFileName: vars.inputFileName default "UNKNOWN",
+
+    customerId: payload.customerId default null,
+    customerName: payload.customerName,
+    customerEmail: payload.customerEmail,
+
+    orderDate: payload.orderDate
+        default (now() as String {format: "yyyy-MM-dd"}),
+
+    productCode: payload.productCode,
+    quantity: payload.quantity as Number,
+
+    currency: payload.currency,
+
+    shippingAddressLine1: payload.shippingAddressLine1,
+    shippingAddressLine2: payload.shippingAddressLine2 default null,
+    shippingCity: payload.shippingCity,
+    shippingState: payload.shippingState,
+    shippingPostalCode: payload.shippingPostalCode,
+    shippingCountry: payload.shippingCountry
+}
+                        ]]></ee:set-payload>
+                    </ee:message>
+
+                </ee:transform>
+
+                <logger
+                    level="INFO"
+                    doc:name="Log CREATE Publish"
+                    message='#["[SFTP] Publishing CREATE to order.commands | Payload: " ++ write(payload, "application/json")]'/>
+
+                <amqp:publish
+    				doc:name="Publish CREATE to RabbitMQ"
+    				config-ref="AMQP_Config">
+				    <amqp:routing-keys>
+        				<amqp:routing-key value="${amqp.queue}"/>
+    				</amqp:routing-keys>
+    				<amqp:message>
+    			    <amqp:properties
+            			correlationId="#[payload.correlationId]"/>
+    				</amqp:message>
+				</amqp:publish>
+                <logger
+                    level="INFO"
+                    doc:name="Log CREATE Published"
+                    message='#["[SFTP] CREATE published successfully to order.commands"]'/>
+
+            </when>
+
+            <otherwise>
+
+                <logger
+                    level="ERROR"
+                    doc:name="Log Invalid CREATE"
+                    message='#["[SFTP] Invalid CREATE record: " ++ write(payload, "application/json")]'/>
+
+            </otherwise>
+
+        </choice>
+
+    </sub-flow>
+
+
+    <!-- ========================================================= -->
+    <!-- UPDATE ORDER                                             -->
+    <!-- ========================================================= -->
+
+    <sub-flow name="update-order-subflow">
+
+        <logger
+            level="INFO"
+            doc:name="Log UPDATE Start"
+            message='#["[SFTP] UPDATE record received | Order ID: "
+                ++ (payload.orderId default "")]'/>
+
+        <choice doc:name="Validate UPDATE Record">
+
+            <when expression='#[!isEmpty(payload.orderId default "")
+                and !isEmpty(payload.customerName default "")
+                and !isEmpty(payload.customerEmail default "")
+                and !isEmpty(payload.quantity default "")
+                and ((payload.quantity as Number) > 0)]'>
+
+                <ee:transform doc:name="Build UPDATE PAPI Payload">
+
+                    <ee:message>
+                        <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    correlationId: (vars.inputFileName default "UNKNOWN") as String,
+    operation: "UPDATE",
+    sourceFileName: vars.inputFileName default "UNKNOWN",
+
+    orderId: payload.orderId,
+
+    customerName: payload.customerName,
+    customerEmail: payload.customerEmail,
+
+    quantity: payload.quantity as Number,
+
+    shippingCity: payload.shippingCity default null,
+    shippingState: payload.shippingState default null,
+    shippingPostalCode: payload.shippingPostalCode default null
+}
+                        ]]></ee:set-payload>
+                    </ee:message>
+
+                </ee:transform>
+
+                <logger
+                    level="INFO"
+                    doc:name="Log UPDATE Publish"
+                    message='#["[SFTP] Publishing UPDATE to order.commands | Payload: " ++ write(payload, "application/json")]'/>
+
+                <amqp:publish
+    				doc:name="Publish CREATE to RabbitMQ"
+    				config-ref="AMQP_Config">
+				    <amqp:routing-keys>
+        				<amqp:routing-key value="${amqp.queue}"/>
+    				</amqp:routing-keys>
+    				<amqp:message>
+    			    <amqp:properties
+            			correlationId="#[payload.correlationId]"/>
+    				</amqp:message>
+				</amqp:publish>
+
+                <logger
+                    level="INFO"
+                    doc:name="Log UPDATE Published"
+                    message='#["[SFTP] UPDATE published successfully to order.commands"]'/>
+
+            </when>
+
+            <otherwise>
+
+                <logger
+                    level="ERROR"
+                    doc:name="Log Invalid UPDATE"
+                    message='#["[SFTP] Invalid UPDATE record: " ++ write(payload, "application/json")]'/>
+
+            </otherwise>
+
+        </choice>
+
+    </sub-flow>
+
+
+    <!-- ========================================================= -->
+    <!-- DELETE ORDER                                             -->
+    <!-- ========================================================= -->
+
+    <sub-flow name="delete-order-subflow">
+
+        <logger
+            level="INFO"
+            doc:name="Log DELETE Start"
+            message='#["[SFTP] DELETE record received | Order ID: "
+                ++ (payload.orderId default "")]'/>
+
+        <choice doc:name="Validate DELETE Record">
+
+            <when expression='#[!isEmpty(payload.orderId default "")
+                and !isEmpty(payload.customerName default "")
+                and !isEmpty(payload.customerEmail default "")]'>
+
+                <ee:transform doc:name="Build DELETE PAPI Payload">
+
+                    <ee:message>
+                        <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    correlationId: (vars.inputFileName default "UNKNOWN") as String,
+    operation: "DELETE",
+    sourceFileName: vars.inputFileName default "UNKNOWN",
+
+    orderId: payload.orderId,
+
+    customerName: payload.customerName,
+    customerEmail: payload.customerEmail
+}
+                        ]]></ee:set-payload>
+                    </ee:message>
+
+                </ee:transform>
+
+                <logger
+                    level="INFO"
+                    doc:name="Log DELETE Publish"
+                    message='#["[SFTP] Publishing DELETE to order.commands | Payload: " ++ write(payload, "application/json")]'/>
+
+                <amqp:publish
+    				doc:name="Publish CREATE to RabbitMQ"
+    				config-ref="AMQP_Config">
+				    <amqp:routing-keys>
+        				<amqp:routing-key value="${amqp.queue}"/>
+    				</amqp:routing-keys>
+    				<amqp:message>
+    			    <amqp:properties
+            			correlationId="#[payload.correlationId]"/>
+    				</amqp:message>
+				</amqp:publish>
+
+                <logger
+                    level="INFO"
+                    doc:name="Log DELETE Published"
+                    message='#["[SFTP] DELETE published successfully to order.commands"]'/>
+
+            </when>
+
+            <otherwise>
+
+                <logger
+                    level="ERROR"
+                    doc:name="Log Invalid DELETE"
+                    message='#["[SFTP] Invalid DELETE record: " ++ write(payload, "application/json")]'/>
+
+            </otherwise>
+
+        </choice>
+
+    </sub-flow>
+
+</mule>
