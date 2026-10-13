@@ -9,6 +9,6 @@ sftp:
 amqp:
   host: "puffin-01.rmq2.cloudamqp.com"
   port: "5671"
-  virtualHost: "sgvymzpq"
-  username: "sgvymzpq"
+  virtualHost: "vywwanbt"
+  username: "vywwanbt"
   queue: "order.commands"
